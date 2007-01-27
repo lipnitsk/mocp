@@ -23,6 +23,8 @@
 #include <sys/un.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -347,6 +349,48 @@ int server_init (int debug, int foreground)
 	}
 
 	return server_sock;
+}
+
+int server_init_tcp ()
+{
+	int sock;
+	struct sockaddr_in my_addr;
+	int yes;
+
+	sock = socket (PF_INET, SOCK_STREAM, 0);
+	if (sock == -1) {
+		logit ("Cant create TCP socket: %s\n", strerror(errno));
+		return -1;
+	}
+
+	yes = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes,
+				sizeof(int))) {
+		logit ("Can't set SO_REUSEADDR: %s\n", strerror(errno));
+	}
+
+	my_addr.sin_family = AF_INET;
+	my_addr.sin_port = htons(SERVER_TCP_PORT);
+	my_addr.sin_addr.s_addr = INADDR_ANY;
+	memset(&(my_addr.sin_zero), 0, sizeof(my_addr.sin_zero));
+
+	/* TODO: only local address */
+	if (bind(sock, (struct sockaddr *)&my_addr,
+				sizeof(struct sockaddr_in))) {
+		logit ("Can't bind to TCP port %d: %s\n", SERVER_TCP_PORT,
+				strerror(errno));
+		return 1;
+	}
+
+	if (listen(sock, 5)) {
+		logit ("Can't listen on port %d: %s\n", SERVER_TCP_PORT,
+				strerror(errno));
+		return 1;
+	}
+
+	logit ("listening on TCP/IP port %d", SERVER_TCP_PORT);
+
+	return sock;
 }
 
 /* Send EV_DATA and the integer value. Return 0 on error. */
@@ -1212,10 +1256,8 @@ static void close_clients ()
 }
 
 /* Handle incomming connections */
-void server_loop (int list_sock)
+void server_loop (int list_sock, int tcp_list_sock)
 {
-	struct sockaddr_un client_name;
-	socklen_t name_len = sizeof (client_name);
 	int end = 0;
 
 	logit ("MOC server started, pid: %d", getpid());
@@ -1227,11 +1269,14 @@ void server_loop (int list_sock)
 		FD_ZERO (&fds_read);
 		FD_ZERO (&fds_write);
 		FD_SET (list_sock, &fds_read);
+		if (tcp_list_sock >= 0)
+			FD_SET (tcp_list_sock, &fds_read);
 		FD_SET (wake_up_pipe[0], &fds_read);
 		add_clients_fds (&fds_read, &fds_write);
 
 		if (!server_quit)
-			res = select (max_fd(list_sock)+1, &fds_read,
+			res = select (max_fd(MAX(list_sock, tcp_list_sock))+1,
+					&fds_read,
 					&fds_write, NULL, NULL);
 		else
 			res = 0;
@@ -1243,6 +1288,8 @@ void server_loop (int list_sock)
 		else if (!server_quit && res >= 0) {
 			if (FD_ISSET(list_sock, &fds_read)) {
 				int client_sock;
+				struct sockaddr_un client_name;
+				socklen_t name_len = sizeof (client_name);
 				
 				debug ("accept()ing connection...");
 				client_sock = accept (list_sock,
@@ -1253,6 +1300,26 @@ void server_loop (int list_sock)
 					fatal ("accept() failed: %s",
 							strerror(errno));
 				logit ("Incoming connection");
+				if (!add_client(client_sock))
+					busy (client_sock);
+			}
+
+			if (tcp_list_sock >= 0
+					&& FD_ISSET(tcp_list_sock, &fds_read)) {
+				int client_sock;
+				struct sockaddr_in addr;
+				socklen_t sin_size = sizeof(struct sockaddr_in);
+	
+				debug ("accept()ing connection...");
+				client_sock = accept (tcp_list_sock,
+					(struct sockaddr *)&addr,
+					&sin_size);
+				
+				if (client_sock == -1)
+					fatal ("accept() failed: %s",
+							strerror(errno));
+				logit ("Incoming TCP/IP connection from %s",
+						inet_ntoa(addr.sin_addr));
 				if (!add_client(client_sock))
 					busy (client_sock);
 			}
@@ -1279,6 +1346,8 @@ void server_loop (int list_sock)
 	close_clients ();
 	clients_cleanup ();
 	close (list_sock);
+	if (tcp_list_sock >= 0)
+		close (tcp_list_sock);
 	server_shutdown ();
 }
 

@@ -3,6 +3,8 @@
 
 #include "playlist.h"
 
+#define	SERVER_TCP_PORT	8734
+
 struct event
 {
 	int type;	/* type of the event (one of EV_*) */

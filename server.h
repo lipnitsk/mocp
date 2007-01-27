@@ -6,7 +6,8 @@
 #define CLIENTS_MAX	10
 
 int server_init (int debug, int foreground);
-void server_loop (int list_sock);
+int server_init_tcp ();
+void server_loop (int list_sock, int tcp_list_sock);
 void server_error (const char *msg);
 void state_change ();
 void set_info_rate (const int rate);

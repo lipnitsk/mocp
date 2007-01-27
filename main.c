@@ -21,6 +21,8 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <signal.h>
@@ -64,11 +66,11 @@ struct parameters
 	char *toggle;
 	char *on;
 	char *off;
+	int use_tcp;
 };
 
 
-/* Connect to the server, return fd os the socket or -1 on error */
-static int server_connect ()
+static int server_connect_local ()
 {
 	struct sockaddr_un sock_name;
 	int sock;
@@ -87,6 +89,37 @@ static int server_connect ()
 	}
 
 	return sock;
+}
+
+static int server_connect_tcp ()
+{
+	int sock;
+	struct sockaddr_in addr;
+	
+	sock = socket (AF_INET, SOCK_STREAM, 0);
+	
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons (SERVER_TCP_PORT);
+	inet_aton ("127.0.0.1", &addr.sin_addr);
+	memset (addr.sin_zero, 0, 8);
+
+	if (connect(sock, (struct sockaddr *)&addr,
+				sizeof(struct sockaddr))) {
+		logit ("Can't connect: %s", strerror(errno));
+		close (sock);
+		return -1;
+	}
+
+	return sock;
+}
+
+/* Connect to the server, return fd os the socket or -1 on error */
+static int server_connect (const int use_tcp)
+{
+	if (use_tcp)
+		return server_connect_tcp ();
+	else
+		return server_connect_local ();
 }
 
 /* Ping the server. return 1 if the server respond with EV_PONG, otherwise 1. */
@@ -135,12 +168,14 @@ static void start_moc (const struct parameters *params, char **args,
 		const int arg_num)
 {
 	int list_sock;
+	int tcp_server_sock;
 	int server_sock = -1;
 
 	decoder_init (params->debug);
 	srand (time(NULL));
 
-	if (!params->foreground && (server_sock = server_connect()) == -1) {
+	if (!params->foreground && (server_sock = server_connect(params->use_tcp))
+			== -1) {
 		int notify_pipe[2];
 		int i = 0;
 
@@ -155,10 +190,11 @@ static void start_moc (const struct parameters *params, char **args,
 				set_me_server ();
 				list_sock = server_init (params->debug,
 						params->foreground);
+				tcp_server_sock = server_init_tcp ();
 				write (notify_pipe[1], &i, sizeof(i));
 				close (notify_pipe[0]);
 				close (notify_pipe[1]);
-				server_loop (list_sock);
+				server_loop (list_sock, tcp_server_sock);
 				options_free ();
 				exit (0);
 			case -1:
@@ -169,7 +205,8 @@ static void start_moc (const struct parameters *params, char **args,
 						!= sizeof(i))
 					fatal ("Server exited");
 				close (notify_pipe[0]);
-				if ((server_sock = server_connect()) == -1) {
+				if ((server_sock = server_connect(params->use_tcp))
+						== -1) {
 					perror ("server_connect()");
 					fatal ("Can't connect to the server");
 				}
@@ -180,7 +217,8 @@ static void start_moc (const struct parameters *params, char **args,
 	else if (params->foreground && params->only_server) {
 		set_me_server ();
 		list_sock = server_init (params->debug, params->foreground);
-		server_loop (list_sock);
+		tcp_server_sock = server_init_tcp ();
+		server_loop (list_sock, tcp_server_sock);
 	}
 
 	signal (SIGCHLD, sig_chld);
@@ -313,6 +351,7 @@ static void show_usage (const char *prg_name) {
 "-o --on <controls>     Turn on a control (shuffle,autonext,repeat).\n"
 "-u --off <controls>    Turn off a control (shuffle,autonext,repeat).\n"
 "-t --toggle <controls> Toggle a control (shuffle,autonext,repeat).\n"
+"-I --tcp		Use TCP/IP for client-server communication.\n"
 , prg_name);
 }
 
@@ -321,7 +360,7 @@ static void server_command (struct parameters *params)
 {
 	int sock;
 
-	if ((sock = server_connect()) == -1)
+	if ((sock = server_connect(params->use_tcp)) == -1)
 		fatal ("The server is not running");
 
 	signal (SIGPIPE, SIG_IGN);
@@ -431,6 +470,7 @@ int main (int argc, char *argv[])
 		{ "toggle",		1, NULL, 't' },
 		{ "on",			1, NULL, 'o' },
 		{ "off",		1, NULL, 'u' },
+		{ "tcp",		0, NULL, 'I' },
 		{ 0, 0, 0, 0 }
 	};
 	int ret, opt_index = 0;
@@ -441,7 +481,7 @@ int main (int argc, char *argv[])
 	options_init ();
 
 	while ((ret = getopt_long(argc, argv,
-					"VhDSFR:macpsxT:C:M:PUynArfiGelk:v:t:o:u:",
+					"VhDSFR:macpsxT:C:M:PUynArfiGelk:v:t:o:u:I",
 					long_options, &opt_index)) != -1) {
 		switch (ret) {
 			case 'V':
@@ -561,6 +601,9 @@ int main (int argc, char *argv[])
 			case 'u' :
 				params.off = optarg;
 				params.dont_run_iface = 1;
+				break;
+			case 'I':
+				params.use_tcp = 1;
 				break;
 			default:
 				show_usage (argv[0]);

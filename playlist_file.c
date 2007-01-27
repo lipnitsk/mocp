@@ -30,8 +30,6 @@
 #include "interface.h"
 #include "decoder.h"
 
-#define MAX(a,b)	((a) > (b) ? (a) : (b))
-
 int is_plist_file (const char *name)
 {
 	const char *ext = ext_pos (name);
