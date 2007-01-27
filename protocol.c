@@ -58,7 +58,7 @@ int get_int (int sock, int *i)
 {
 	int res;
 	
-	res = recv (sock, i, sizeof(int), 0);
+	res = recv (sock, i, sizeof(int), MSG_WAITALL);
 	if (res == -1)
 		logit ("recv() failed when getting int: %s", strerror(errno));
 
@@ -77,7 +77,7 @@ enum noblock_io_status get_int_noblock (int sock, int *i)
 	if (fcntl(sock, F_SETFL, O_NONBLOCK) == -1)
 		fatal ("Setting O_NONBLOCK for the socket failed: %s",
 				strerror(errno));
-	res = recv (sock, i, sizeof(int), 0);
+	res = recv (sock, i, sizeof(int), MSG_WAITALL);
 	flags &= ~O_NONBLOCK;
 	if (fcntl(sock, F_SETFL, flags) == -1)
 		fatal ("Restoring flags for socket failed: %s",
@@ -148,7 +148,7 @@ char *get_str (int sock)
 
 	str = (char *)xmalloc (sizeof(char) * (len + 1));
 	while (nread < len) {
-		res = recv (sock, str + nread, len - nread, 0);
+		res = recv (sock, str + nread, len - nread, MSG_WAITALL);
 		if (res == -1) {
 			logit ("recv() failed when getting string: %s",
 					strerror(errno));
@@ -185,7 +185,7 @@ int get_time (int sock, time_t *i)
 {
 	int res;
 	
-	res = recv (sock, i, sizeof(time_t), 0);
+	res = recv (sock, i, sizeof(time_t), MSG_WAITALL);
 	if (res == -1)
 		logit ("recv() failed when getting time_t: %s", strerror(errno));
 
