@@ -53,12 +53,37 @@ char *socket_name ()
 	return socket_name;
 }
 
+static ssize_t recv_all (int sock, void *buf, const size_t size)
+{
+	size_t count = 0;
+
+	while (count < size) {
+		ssize_t res;
+
+		res = recv (sock, (char *)buf + count, size - count,
+				MSG_WAITALL);
+		if (res < 0) {
+			logit ("recv() failed when getting %d bytes: %s", size,
+					strerror(errno));
+			return 0;
+		}
+		if (res == 0) {
+			fatal ("Connection closed by the server while "
+					"receiving data");
+		}
+
+		count += res;
+	}
+
+	return count;
+}
+
 /* Get an intiger value from the socket, return == 0 on error. */
 int get_int (int sock, int *i)
 {
 	int res;
 	
-	res = recv (sock, i, sizeof(int), MSG_WAITALL);
+	res = recv_all (sock, i, sizeof(int));
 	if (res == -1)
 		logit ("recv() failed when getting int: %s", strerror(errno));
 
@@ -93,12 +118,30 @@ enum noblock_io_status get_int_noblock (int sock, int *i)
 	return NB_IO_ERR;
 }
 
+/* Send data to the socket. Return 0 on error. */
+static int send_all (int sock, const void *buf, const size_t size)
+{
+	ssize_t sent;
+	size_t send_pos = 0;
+	
+	while (send_pos < size) {
+		sent = send (sock, (char *)buf + send_pos, size - send_pos, 0);
+		if (sent < 0) {
+			logit ("Error while sending data: %s", strerror(errno));
+			return -1;
+		}
+		send_pos += sent;
+	}
+
+	return send_pos;
+}
+
 /* Send an integer value to the socket, return == 0 on error */
 int send_int (int sock, int i)
 {
 	int res;
 	
-	res = send (sock, &i, sizeof(int), 0);
+	res = send_all (sock, &i, sizeof(int));
 	if (res == -1)
 		logit ("send() failed: %s", strerror(errno));
 
@@ -148,7 +191,7 @@ char *get_str (int sock)
 
 	str = (char *)xmalloc (sizeof(char) * (len + 1));
 	while (nread < len) {
-		res = recv (sock, str + nread, len - nread, MSG_WAITALL);
+		res = recv_all (sock, str + nread, len - nread);
 		if (res == -1) {
 			logit ("recv() failed when getting string: %s",
 					strerror(errno));
@@ -174,7 +217,7 @@ int send_str (int sock, const char *str)
 	if (!send_int(sock, strlen(str)))
 		return 0;
 
-	if (send(sock, str, len, 0) != len)
+	if (send_all(sock, str, len) != len)
 		return 0;
 	
 	return 1;
@@ -185,7 +228,7 @@ int get_time (int sock, time_t *i)
 {
 	int res;
 	
-	res = recv (sock, i, sizeof(time_t), MSG_WAITALL);
+	res = recv_all (sock, i, sizeof(time_t));
 	if (res == -1)
 		logit ("recv() failed when getting time_t: %s", strerror(errno));
 
@@ -197,7 +240,7 @@ int send_time (int sock, time_t i)
 {
 	int res;
 	
-	res = send (sock, &i, sizeof(time_t), 0);
+	res = send_all (sock, &i, sizeof(time_t));
 	if (res == -1)
 		logit ("send() failed: %s", strerror(errno));
 
@@ -304,24 +347,6 @@ void packet_buf_add_item (struct packet_buf *b, const struct plist_item *item)
 	packet_buf_add_str (b, item->title_tags ? item->title_tags : "");
 	packet_buf_add_tags (b, item->tags);
 	packet_buf_add_time (b, item->mtime);
-}
-
-/* Send data to the socket. Return 0 on error. */
-static int send_all (int sock, const char *buf, const size_t size)
-{
-	ssize_t sent;
-	size_t send_pos = 0;
-	
-	while (send_pos < size) {
-		sent = send (sock, buf + send_pos, size - send_pos, 0);
-		if (sent < 0) {
-			logit ("Error while sending data: %s", strerror(errno));
-			return 0;
-		}
-		send_pos += sent;
-	}
-
-	return 1;
 }
 
 /* Send a playlist item to the socket. If item == NULL, send empty item mark
@@ -704,6 +729,15 @@ enum noblock_io_status event_send_noblock (int sock, struct event_queue *q)
 	/* We must do it in one send() call to be able to handle blocking. */
 	b = make_event_packet (event_get_first(q));
 	res = send (sock, b->buf, b->len, MSG_DONTWAIT);
+
+	if (res <= 0 && errno == EAGAIN) {
+		logit ("Sending event would block");
+		return NB_IO_BLOCK;
+	}
+
+	if ((size_t)res < b->len)
+		res = send_all (sock, b->buf + res, b->len - res);
+
 	packet_buf_free (b);
 
 	if (res > 0) {
@@ -715,12 +749,8 @@ enum noblock_io_status event_send_noblock (int sock, struct event_queue *q)
 
 		return NB_IO_OK;
 	}
-	else if (errno == EAGAIN) {
-		logit ("Sending event would block");
-		return NB_IO_BLOCK;
-	}
 	
 	/* Error */
-	logit ("Error when sending event: %s", strerror(errno));
+	logit ("Error when sending event");
 	return NB_IO_ERR;
 }
