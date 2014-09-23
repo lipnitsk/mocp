@@ -161,8 +161,8 @@ if test "x$enable_cache" != "xno"
 then
 	AX_PATH_BDB([4.1], [], [BDB4_DEPRECATED="yes"])
 	AX_PATH_BDB([4], [
-		       LIBS="$BDB_LIBS $EXTRA_LIBS"
-		       LDFLAGS="$BDB_LDFLAGS $LDFLAGS"
+		       EXTRA_LIBS="$EXTRA_LIBS $BDB_LIBS"
+		       LDFLAGS="$LDFLAGS $BDB_LDFLAGS"
 		       CPPFLAGS="$CPPFLAGS $BDB_CPPFLAGS"
 		       ],
 		       AC_MSG_ERROR([BerkeleyDB (libdb) not found.]))
