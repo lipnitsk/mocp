@@ -398,6 +398,17 @@ then
 		[true])
 fi
 
+AC_ARG_WITH(cue, AS_HELP_STRING([--without-cue],
+                                 [Compile without CUE sheet support]))
+
+if test "x$with_cue" != "xno"
+then
+	PKG_CHECK_MODULES(CUE, [libcue >= 1.4.0],
+	     [AC_DEFINE([HAVE_CUE], 1, [Define if you have libcue])
+	      CFLAGS="$CFLAGS $CUE_CFLAGS"
+	      EXTRA_LIBS="$EXTRA_LIBS $CUE_LIBS"])
+fi
+
 AC_SUBST(EXTRA_LIBS)
 AC_SUBST(EXTRA_DISTS)
 AH_BOTTOM([#include "compiler.h"])
