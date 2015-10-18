@@ -306,6 +306,8 @@ void packet_buf_add_item (struct packet_buf *b, const struct plist_item *item)
 	packet_buf_add_str (b, item->title_tags ? item->title_tags : "");
 	packet_buf_add_tags (b, item->tags);
 	packet_buf_add_time (b, item->mtime);
+	packet_buf_add_time (b, item->stime);
+	packet_buf_add_time (b, item->etime);
 }
 
 /* Send data to the socket. Return 0 on error. */
@@ -463,8 +465,10 @@ struct plist_item *recv_item (int sock)
 			return NULL;
 		}
 
-		if (!get_time(sock, &item->mtime)) {
-			logit ("Error while receiving mtime");
+		if (!get_time(sock, &item->mtime)
+				|| !get_time (sock, &item->stime)
+				|| !get_time (sock, &item->etime)) {
+			logit ("Error while receiving mtime, stime, or etime");
 			if (item->title_tags)
 				free (item->title_tags);
 			free (item->file);
@@ -472,6 +476,9 @@ struct plist_item *recv_item (int sock)
 			free (item);
 			return NULL;
 		}
+
+		if (item->stime != -1)
+			item->type = F_CUE_TRACK;
 	}
 
 	return item;

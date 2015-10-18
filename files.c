@@ -41,6 +41,7 @@
 #include "playlist_file.h"
 #include "log.h"
 #include "utf8.h"
+#include "cue_sheet_file.h"
 
 #define READ_LINE_INIT_SIZE	256
 
@@ -125,6 +126,8 @@ enum file_type file_type (const char *file)
 		return F_SOUND;
 	if (is_plist_file(file))
 		return F_PLAYLIST;
+	if (is_cue_sheet_file(file))
+		return F_CUE_SHEET;
 	return F_OTHER;
 }
 
@@ -235,7 +238,7 @@ void switch_titles_file (struct plist *plist)
 	hide_extn = options_get_bool ("HideFileExtension");
 
 	for (i = 0; i < plist->num; i++) {
-		if (plist_deleted (plist, i))
+		if (plist_deleted (plist, i) || is_cue_track (plist, i))
 			continue;
 
 		if (!plist->items[i].title_file)
@@ -254,7 +257,7 @@ void switch_titles_tags (struct plist *plist)
 	hide_extn = options_get_bool ("HideFileExtension");
 
 	for (i = 0; i < plist->num; i++) {
-		if (plist_deleted (plist, i))
+		if (plist_deleted (plist, i) || is_cue_track (plist, i))
 			continue;
 
 		if (!plist->items[i].title_tags && !plist->items[i].title_file)
@@ -368,7 +371,8 @@ struct file_tags *read_file_tags (const char *file,
  * all recognized files. Put directories, playlists and sound files
  * in proper structures. Return 0 on error.*/
 int read_directory (const char *directory, lists_t_strs *dirs,
-		lists_t_strs *playlists, struct plist *plist)
+		lists_t_strs *playlists, lists_t_strs *cue_sheets,
+		struct plist *plist)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -421,6 +425,8 @@ int read_directory (const char *directory, lists_t_strs *dirs,
 			lists_strs_append (dirs, file);
 		else if (type == F_PLAYLIST)
 			lists_strs_append (playlists, file);
+		else if (type == F_CUE_SHEET)
+			lists_strs_append (cue_sheets, file);
 	}
 
 	closedir (dir);

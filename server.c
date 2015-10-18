@@ -424,6 +424,16 @@ static int send_data_str (const struct client *cli, const char *str) {
 	return 1;
 }
 
+static int send_data_time (const struct client *cli, const time_t data)
+{
+    assert (cli->socket != -1);
+    if (!send_int(cli->socket, EV_DATA) || !send_time(cli->socket, data))
+    {
+            return 0;
+    }
+    return 1;
+}
+
 /* Add event to the client's queue */
 static void add_event (struct client *cli, const int event, void *data)
 {
@@ -483,15 +493,15 @@ static void on_song_change ()
 		else {
 			switch (arg[1]) {
 			case 'a':
-				str = curr_tags->artist ? curr_tags->artist : "";
+				str = curr_tags->artist ? curr_tags->artist : (char*)"";
 				lists_strs_append (arg_list, str);
 				break;
 			case 'r':
-				str = curr_tags->album ? curr_tags->album : "";
+				str = curr_tags->album ? curr_tags->album : (char*)"";
 				lists_strs_append (arg_list, str);
 				break;
 			case 't':
-				str = curr_tags->title ? curr_tags->title : "";
+				str = curr_tags->title ? curr_tags->title : (char*)"";
 				lists_strs_append (arg_list, str);
 				break;
 			case 'n':
@@ -507,22 +517,46 @@ static void on_song_change ()
 				lists_strs_append (arg_list, curr_file);
 				break;
 			case 'D':
-				if (curr_tags->time >= 0) {
-					str = (char *) xmalloc (sizeof (char) * 10);
-					snprintf (str, 10, "%d", curr_tags->time);
-					lists_strs_push (arg_list, str);
+				if (audio_get_type() == F_CUE_TRACK) 
+				{
+				    str = (char *) xmalloc (sizeof (char) * 10);
+				    snprintf (str, 10, "%d", (int) (audio_get_etime() - audio_get_stime()));
+				    lists_strs_push (arg_list, str);
 				}
 				else
-					lists_strs_append (arg_list, "");
+				{
+				    if (curr_tags->time >= 0) 
+				    {
+                        str = (char *) xmalloc (sizeof (char) * 10);
+                        snprintf (str, 10, "%d", curr_tags->time);
+                        lists_strs_push (arg_list, str);
+				    }
+				    else
+				    {
+    					lists_strs_append (arg_list, "");
+				    }
+				}
 				break;
 			case 'd':
-				if (curr_tags->time >= 0) {
-					str = (char *) xmalloc (sizeof (char) * 12);
-					sec_to_min (str, curr_tags->time);
-					lists_strs_push (arg_list, str);
-				}
-				else
-					lists_strs_append (arg_list, "");
+			    if (audio_get_type() == F_CUE_TRACK) 
+			    {
+                    str = (char *)xmalloc(sizeof (char) * 10);
+                    sec_to_min(str, (int) (audio_get_etime() - audio_get_stime ()));
+                    lists_strs_push(arg_list, str);
+                } 
+                else
+                {
+                    if (curr_tags->time >= 0)
+                    {
+                        str = (char *) xmalloc (sizeof (char) * 12);
+                        sec_to_min (str, curr_tags->time);
+                        lists_strs_push (arg_list, str);
+                    }
+                    else
+                    {
+                        lists_strs_append (arg_list, "");
+                    }
+			    }
 				break;
 			default:
 				lists_strs_append (arg_list, arg);
@@ -714,16 +748,41 @@ static void busy (int sock)
 static int req_list_add (struct client *cli)
 {
 	char *file;
-
+    char *cue_track_title = NULL;
+    time_t start;
+    time_t end = -1;
 	file = get_str (cli->socket);
 	if (!file)
+    {
 		return 0;
-
-	logit ("Adding '%s' to the list", file);
-
-	audio_plist_add (file);
+    }
+//	logit ("Adding '%s' to the list", file);
+    if (!get_time(cli->socket, &start)) 
+    {
+        free (file);
+        return 0;
+    }
+    /* If start != -1, it's cue track file, get end time and title */
+    if (start != -1) 
+    {
+        if (!get_time(cli->socket, &end)) 
+        {
+                free (file);
+                return 0;
+        }
+        cue_track_title = get_str (cli->socket);
+        if (!cue_track_title) 
+        {
+            free (file);
+            return 0;
+        }
+    }
+	audio_plist_add (file, cue_track_title, start, end);
+	if (cue_track_title)
+    {
+		free (cue_track_title);
+    }
 	free (file);
-
 	return 1;
 }
 
@@ -823,6 +882,64 @@ static int send_sname (struct client *cli)
 
 	return status;
 }
+
+static int send_title (struct client *cli)
+{      
+    int status = 1;
+    char *title = audio_get_title ();
+    if (!send_data_str(cli, title ? title : ""))
+    {
+        status = 0;
+    }
+    if (title)
+    {
+        free (title);
+    }
+    return status;
+}
+
+/* Send type of playing track to the client. Return 0 on error. */
+static int send_type (struct client *cli)
+{
+    int status = 1;
+    enum file_type type = audio_get_type ();
+    if (!send_data_int(cli, (int) type))
+    {
+            status = 0;
+    }
+    return status;
+}
+
+static int send_vtime (struct client *cli)
+{
+    int status = 1;
+    if (!send_data_time (cli, audio_get_vtime ()))
+    {
+            status = 0;
+    }
+    return status;
+}
+
+static int send_stime (struct client *cli)
+{
+    int status = 1;
+    if (!send_data_time (cli, audio_get_stime ()))
+    {
+        status = 0;
+    }
+    return status;
+}
+
+static int send_etime (struct client *cli)
+{
+    int status = 1;
+    if (!send_data_time (cli, audio_get_etime ()))
+    {
+        status = 0;
+    }
+    return status;
+}
+
 
 /* Return 0 if an option is valid when getting/setting with the client. */
 static int valid_sync_option (const char *name)
@@ -1472,6 +1589,22 @@ static void handle_command (const int client_id)
 			if (!send_sname(cli))
 				err = 1;
 			break;
+        case CMD_GET_TITLE:
+            if (!send_title(cli))
+                err = 1;
+            break;
+        case CMD_GET_TYPE:
+            if (!send_type(cli))
+                err = 1;
+            break;
+        case CMD_GET_STIME:
+            if (!send_stime(cli))
+                err = 1;
+            break;
+        case CMD_GET_ETIME:
+            if (!send_etime(cli))
+                err = 1;
+            break;
 		case CMD_GET_STATE:
 			if (!send_data_int(cli, audio_get_state()))
 				err = 1;

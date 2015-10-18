@@ -52,6 +52,7 @@
 #include "utf8.h"
 #include "rcc.h"
 #include "lyrics.h"
+#include "cue_sheet_file.h"
 
 #ifndef PACKAGE_REVISION
 #define STARTUP_MESSAGE "Welcome to " PACKAGE_NAME \
@@ -1053,12 +1054,14 @@ static int add_to_menu (struct menu *menu, const struct plist *plist,
 	const char *type_name;
 
 	made_from_tags = (options_get_bool ("ReadTags") && item->title_tags);
-
-	if (made_from_tags)
-		title = make_menu_title (item->title_tags, 1, 0);
+	if (item->title_tags && !strncmp("(cue)", item->title_tags, 5))
+		title = make_menu_title (item->title_tags, 1, full_paths);
+	else if (made_from_tags)
+		title = make_menu_title (item->title_tags, 1, full_paths);
 	else
 		title = make_menu_title (item->title_file, 0, full_paths);
-	added = menu_add (menu, title, plist_file_type (plist, num), item->file);
+
+	added = menu_add (menu, title, plist_file_type(plist, num), item->file, item->stime, item->etime);
 	free (title);
 
 	if (item->tags && item->tags->time != -1) {
@@ -1107,10 +1110,11 @@ static void side_menu_clear (struct side_menu *m)
 	menu_set_info_attr_sel_marked (m->menu.list.main, get_color(CLR_MENU_ITEM_INFO_MARKED_SELECTED));
 }
 
-/* Fill the directory or playlist side menu with this content. */
+/* Fill the directory, playlist or cue sheets side menu with this content. */
 static void side_menu_make_list_content (struct side_menu *m,
 		const struct plist *files, const lists_t_strs *dirs,
-		const lists_t_strs *playlists, const int add_up_dir)
+		const lists_t_strs *playlists, const lists_t_strs *cue_sheets,
+		const int add_up_dir)
 {
 	struct menu_item *added;
 	int i;
@@ -1123,7 +1127,7 @@ static void side_menu_make_list_content (struct side_menu *m,
 	side_menu_clear (m);
 
 	if (add_up_dir) {
-		added = menu_add (m->menu.list.main, "../", F_DIR, "..");
+		added = menu_add (m->menu.list.main, "../", F_DIR, "..", -1, -1);
 		menu_item_set_attr_normal (added, get_color(CLR_MENU_ITEM_DIR));
 		menu_item_set_attr_sel (added,
 				get_color(CLR_MENU_ITEM_DIR_SELECTED));
@@ -1162,7 +1166,7 @@ static void side_menu_make_list_content (struct side_menu *m,
 			}
 
 			added = menu_add (m->menu.list.main, title, F_DIR,
-					lists_strs_at (dirs, i));
+					lists_strs_at (dirs, i), -1, -1);
 			menu_item_set_attr_normal (added,
 					get_color(CLR_MENU_ITEM_DIR));
 			menu_item_set_attr_sel (added,
@@ -1173,12 +1177,23 @@ static void side_menu_make_list_content (struct side_menu *m,
 		for (i = 0; i < lists_strs_size (playlists); i++){
 			added = menu_add (m->menu.list.main,
 					strrchr (lists_strs_at (playlists, i), '/') + 1,
-					F_PLAYLIST, lists_strs_at (playlists, i));
+					F_PLAYLIST, lists_strs_at (playlists, i), -1, -1);
 			menu_item_set_attr_normal (added,
 					get_color(CLR_MENU_ITEM_PLAYLIST));
 			menu_item_set_attr_sel (added,
 					get_color(
 					CLR_MENU_ITEM_PLAYLIST_SELECTED));
+		}
+
+	if (cue_sheets)
+		for (i = 0; i < lists_strs_size (cue_sheets); i++) {
+			added = menu_add (m->menu.list.main,
+					strrchr(lists_strs_at (cue_sheets, i), '/') + 1,
+					F_CUE_SHEET, lists_strs_at (cue_sheets, i), -1, -1);
+			menu_item_set_attr_normal (added,
+					get_color(CLR_MENU_ITEM_CUE_SHEET));
+			menu_item_set_attr_sel (added,
+					get_color(CLR_MENU_ITEM_CUE_SHEET_SELECTED));
 		}
 
 	/* playlist items */
@@ -1355,6 +1370,59 @@ static enum file_type side_menu_curritem_get_type (const struct side_menu *m)
 	return F_OTHER;
 }
 
+static char *side_menu_curritem_get_title (const struct side_menu *m)
+{
+    struct menu_item *mi;
+
+    assert (m != NULL);
+    assert (m->visible);
+    assert (m->type == MENU_DIR || m->type == MENU_PLAYLIST || m->type == MENU_THEMES);
+
+    mi = menu_curritem (m->menu.list.main);
+
+    if (mi)
+    {
+        return menu_item_get_title (mi);
+    }
+    return NULL;
+}
+
+static time_t side_menu_curritem_get_stime (const struct side_menu *m)
+{
+    struct menu_item *mi;
+    assert (m != NULL);
+    assert (m->visible);
+    assert (m->type == MENU_DIR || m->type == MENU_PLAYLIST || m->type == MENU_THEMES);
+
+    mi = menu_curritem (m->menu.list.main);
+
+    if (mi)
+    {
+        return menu_item_get_stime (mi);
+    }
+
+    return (time_t) 0;
+}
+
+static time_t side_menu_curritem_get_etime (const struct side_menu *m)
+{
+    struct menu_item *mi;
+
+    assert (m != NULL);
+    assert (m->visible);
+    assert (m->type == MENU_DIR || m->type == MENU_PLAYLIST || m->type == MENU_THEMES);
+
+    mi = menu_curritem (m->menu.list.main);
+
+    if (mi)
+    {
+        return menu_item_get_etime (mi);
+    }
+
+    return (time_t) 0;
+}
+
+
 static char *side_menu_get_curr_file (const struct side_menu *m)
 {
 	struct menu_item *mi;
@@ -1507,7 +1575,7 @@ static void side_menu_add_file (struct side_menu *m, const char *file,
 {
 	struct menu_item *added;
 
-	added = menu_add (m->menu.list.main, title, type, file);
+	added = menu_add (m->menu.list.main, title, type, file, -1, -1);
 
 	menu_item_set_attr_normal (added, get_color(CLR_MENU_ITEM_FILE));
 	menu_item_set_attr_sel (added, get_color(CLR_MENU_ITEM_FILE_SELECTED));
@@ -1838,7 +1906,8 @@ static enum side_menu_type iface_to_side_menu (const enum iface_menu iface_menu)
 
 static void main_win_set_dir_content (struct main_win *w,
 		const enum iface_menu iface_menu, const struct plist *files,
-		const lists_t_strs *dirs, const lists_t_strs *playlists)
+		const lists_t_strs *dirs, const lists_t_strs *playlists,
+		const lists_t_strs *cue_sheets)
 {
 	struct side_menu *m;
 
@@ -1847,9 +1916,11 @@ static void main_win_set_dir_content (struct main_win *w,
 	m = find_side_menu (w, iface_to_side_menu(iface_menu));
 
 	side_menu_make_list_content (m, files, dirs, playlists,
-			iface_menu == IFACE_MENU_DIR);
+			cue_sheets, iface_menu == IFACE_MENU_DIR);
 	if (w->curr_file)
+    {
 		side_menu_mark_file (m, w->curr_file);
+    }
 	main_win_draw (w);
 }
 
@@ -1869,33 +1940,37 @@ static void main_win_set_title (struct main_win *w,
 
 static void main_win_update_dir_content (struct main_win *w,
 		const enum iface_menu iface_menu, const struct plist *files,
-		const lists_t_strs *dirs, const lists_t_strs *playlists)
+		const lists_t_strs *dirs, const lists_t_strs *playlists,
+		const lists_t_strs *cue_sheets)
 {
 	struct side_menu *m;
 	struct side_menu_state ms;
 
 	assert (w != NULL);
 
-	m = find_side_menu (w, iface_menu == IFACE_MENU_DIR ? MENU_DIR
-			: MENU_PLAYLIST);
+	m = find_side_menu (w, iface_menu == IFACE_MENU_DIR ? MENU_DIR : MENU_PLAYLIST);
 
 	side_menu_get_state (m, &ms);
-	side_menu_make_list_content (m, files, dirs, playlists, 1);
+	side_menu_make_list_content (m, files, dirs, playlists,
+			cue_sheets, 1);
 	side_menu_set_state (m, &ms);
 	if (w->curr_file)
+    {
 		side_menu_mark_file (m, w->curr_file);
+    }
 	main_win_draw (w);
 }
 
-static void main_win_switch_to (struct main_win *w,
-		const enum side_menu_type menu)
+static void main_win_switch_to (struct main_win *w,	const enum side_menu_type menu)
 {
 	size_t ix;
 
 	assert (w != NULL);
 
 	if (w->selected_menu == 2) /* if the themes menu is selected */
+    {
 		side_menu_destroy (&w->menus[2]);
+    }
 
 	for (ix = 0; ix < ARRAY_SIZE(w->menus); ix += 1)
 		if (w->menus[ix].type == menu) {
@@ -1953,6 +2028,28 @@ static enum file_type main_win_curritem_get_type (const struct main_win *w)
 
 	return side_menu_curritem_get_type (&w->menus[w->selected_menu]);
 }
+
+static char *main_win_curritem_get_title (const struct main_win *w)
+{
+       assert (w != NULL);
+
+       return side_menu_curritem_get_title (&w->menus[w->selected_menu]);
+}
+
+static time_t main_win_curritem_get_stime (const struct main_win *w)
+{
+       assert (w != NULL);
+
+       return side_menu_curritem_get_stime (&w->menus[w->selected_menu]);
+}
+
+static time_t main_win_curritem_get_etime (const struct main_win *w)
+{
+       assert (w != NULL);
+
+       return side_menu_curritem_get_etime (&w->menus[w->selected_menu]);
+}
+
 
 static char *main_win_get_curr_file (const struct main_win *w)
 {
@@ -3754,18 +3851,17 @@ static void iface_show_num_files (const int num)
  * playlists. */
 void iface_set_dir_content (const enum iface_menu iface_menu,
 		const struct plist *files, const lists_t_strs *dirs,
-		const lists_t_strs *playlists)
+		const lists_t_strs *playlists, const lists_t_strs *cue_sheets)
 {
 	main_win_set_dir_content (&main_win, iface_menu, files, dirs,
-			playlists);
+			playlists, cue_sheets);
 	info_win_set_files_time (&info_win,
 			main_win_get_files_time(&main_win, iface_menu),
 			main_win_is_time_for_all(&main_win, iface_menu));
-
 	iface_show_num_files (plist_count(files)
 			+ (dirs ? lists_strs_size (dirs) : 0)
+			+ (cue_sheets ? lists_strs_size (cue_sheets) : 0)
 			+ (playlists ? lists_strs_size (playlists) : 0));
-
 	iface_refresh_screen ();
 }
 
@@ -3835,18 +3931,17 @@ void iface_update_theme_selection (const char *file)
  * a new menu. */
 void iface_update_dir_content (const enum iface_menu iface_menu,
 		const struct plist *files, const lists_t_strs *dirs,
-		const lists_t_strs *playlists)
+		const lists_t_strs *playlists, const lists_t_strs *cue_sheets)
 {
 	main_win_update_dir_content (&main_win, iface_menu, files, dirs,
-			playlists);
+			playlists, cue_sheets);
 	info_win_set_files_time (&info_win,
 			main_win_get_files_time(&main_win, iface_menu),
 			main_win_is_time_for_all(&main_win, iface_menu));
-
 	iface_show_num_files (plist_count(files)
 			+ (dirs ? lists_strs_size (dirs) : 0)
+			+ (cue_sheets ? lists_strs_size (cue_sheets) : 0)
 			+ (playlists ? lists_strs_size (playlists) : 0));
-
 	iface_refresh_screen ();
 }
 
@@ -3855,8 +3950,9 @@ void iface_update_item (const enum iface_menu menu,
 		const struct plist *plist, const int n)
 {
 	assert (plist != NULL);
+	if (!is_cue_track (plist, n))
+		main_win_update_item (&main_win, menu, plist, n);
 
-	main_win_update_item (&main_win, menu, plist, n);
 	info_win_set_files_time (&info_win,
 			main_win_get_curr_files_time(&main_win),
 			main_win_is_curr_time_for_all(&main_win));
@@ -3962,6 +4058,22 @@ void iface_menu_key (const enum key_cmd cmd)
 enum file_type iface_curritem_get_type ()
 {
 	return main_win_curritem_get_type (&main_win);
+}
+
+char *iface_curritem_get_title ()
+{
+    return main_win_curritem_get_title (&main_win);
+}
+
+/* Get start and end time of selected item (for cue tracks). */
+time_t iface_curritem_get_stime ()
+{
+	return main_win_curritem_get_stime (&main_win);
+}
+
+time_t iface_curritem_get_etime ()
+{
+	return main_win_curritem_get_etime (&main_win);
 }
 
 /* Return a non zero value if a directory menu is currently selected. */
@@ -4377,7 +4489,8 @@ void iface_make_visible (const enum iface_menu menu, const char *file)
 	assert (file != NULL);
 
 	main_win_make_visible (&main_win,
-			menu == IFACE_MENU_DIR ? MENU_DIR : MENU_PLAYLIST,
+			menu == IFACE_MENU_DIR ? MENU_DIR
+			: MENU_PLAYLIST,
 			file);
 	iface_refresh_screen ();
 }
