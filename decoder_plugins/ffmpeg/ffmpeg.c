@@ -56,6 +56,7 @@
 #endif
 
 #if HAVE_LIBAVFORMAT_AVFORMAT_H
+
 /* This warning reset suppresses a deprecation warning message for
  * av_metadata_set()'s use of an AVMetadata parameter.  Although it
  * only occurs in FFmpeg release 0.7, the non-linear versioning of
@@ -63,14 +64,22 @@
  * particular release as it seems to have been introduced in avformat
  * version 53.1.0 and resolved in version 52.108.0. */
 GCC_DIAG_OFF(deprecated-declarations)
-#include <libavformat/avformat.h>
+# include <libavformat/avformat.h>
 GCC_DIAG_ON(deprecated-declarations)
-#include <libavutil/mathematics.h>
-#ifdef HAVE_AV_GET_CHANNEL_LAYOUT_NB_CHANNELS
-#include <libavutil/audioconvert.h>
-#endif
+
+# include <libavutil/mathematics.h>
+# ifdef HAVE_AV_GET_CHANNEL_LAYOUT_NB_CHANNELS
+#  if HAVE_LIBAVUTIL_CHANNEL_LAYOUT_H
+#   include <libavutil/channel_layout.h>
+#  else
+#   include <libavutil/audioconvert.h>
+#  endif
+# endif
+
 #else
-#include <ffmpeg/avformat.h>
+
+# include <ffmpeg/avformat.h>
+
 #endif
 
 /* FFmpeg also likes common names, without that, our common.h and log.h
