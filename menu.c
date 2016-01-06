@@ -15,6 +15,7 @@
 
 #define _GNU_SOURCE
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifdef HAVE_NCURSESW_H
