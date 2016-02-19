@@ -85,6 +85,7 @@ Transitional Code Removal (after 2.5):
 * Remove ISO C99 capable compiler requirement warning.
 * Remove Autoconf version 2.64 requirement warning.
 * Remove FLAC version 1.1.3 requirement warning.
+* Remove FFmpeg/LibAV raised requirement warning.
 * Remove Berkeley DB version 4.1 requirement warning.
 * Remove libcurl version 7.15.1 requirement warning.
 * Remove ALSA version 1.0.11 requirement warning.
@@ -95,7 +96,7 @@ Transitional Code Removal (after 2.5):
 FFmpeg/LibAV Support Changes (after 2.5):
 
 * Remove deprecated ffmpeg-config support.
-* Raise minimum FFmpeg/LibAV requirement to release 0.7.
+* Raise minimum FFmpeg/LibAV requirement to version 1.0/10.0.
 * Remove supporting code for previous releases.
 
 
