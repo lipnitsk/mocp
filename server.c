@@ -1712,13 +1712,10 @@ void server_loop (int list_sock)
 		else
 			res = 0;
 
-		if (res == -1 && errno != EINTR && !server_quit) {
-			int err = errno;
+		if (res == -1 && errno != EINTR && !server_quit)
+			fatal ("select() failed: %s", strerror (errno));
 
-			logit ("select() failed: %s", strerror(err));
-			fatal ("select() failed: %s", strerror(err));
-		}
-		else if (!server_quit && res >= 0) {
+		if (!server_quit && res >= 0) {
 			if (FD_ISSET(list_sock, &fds_read)) {
 				int client_sock;
 
