@@ -1,3 +1,21 @@
+2.5.1
+	* Significant bug fixes:
+	  - Corrected the setting of linked libraries for Berkeley DB
+	  - Fixed ALSA volume setting problem (Tomasz Golinski)
+	  - Fixed clearing of stream status message on error
+	  - Resolved FFmpeg/LibAV's downmixing API issues (Andreas Cadhalpun)
+	  - Removed duplicate logging of fatal error messages
+	* Miscellaneous:
+	  - Adapted to FFmpeg 3.0 API
+	  - Warn of FFmpeg/LibAV version requirement rising to 1.0/10.0
+	  - Warn of pending POSIX.1-2001 compliance requirement
+	  - Fixed several warnings and errors on OpenBSD (Brent Cook)
+	  - Fixed various (and potential) segfaults (Daniel T. Borelli,
+	    Hendrik Iben, Rastislav Barlik)
+	  - Fixed various resource leakages
+	  - Silenced various compiler warnings
+	  - Added instructions on building with autoreconf
+
 2.5.0 - "Consolidation"
 	* Autotools and packaging changes:
 	  - Upgraded autoconf version requirement to 2.60
@@ -656,7 +674,7 @@
 	* Stronger checking for parse errors in configuration file.
 
 1.1.0
-	* Support for WAVE.
+	* Support for WAV.
 	* Playlist without reading/writeing to file.
 	* Option in the config file to automaticaly change process priority at
 	  startup. Helpful on slow computers.
