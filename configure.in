@@ -468,7 +468,7 @@ echo
 echo "-----------------------------------------------------------------------"
 echo "MOC will be compiled with:"
 echo
-if test `echo $DECODER_PLUGINS | $AWK '{print(length)}'` -le 50
+if test `echo $DECODER_PLUGINS | $AWK '{print(length())}'` -le 50
 then
 	echo "Decoder plugins:  $DECODER_PLUGINS"
 else
