@@ -790,10 +790,18 @@ static bool is_seek_broken (struct ffmpeg_data *data)
 	}
 #endif
 
-	/* ASF/MP2 (.wma): Seeking ends playing. */
-	if (!strcmp (data->ic->iformat->name, "asf") &&
-	    data->codec->id == CODEC_ID_MP2)
-		return true;
+	/* ASF/MP2 (.wma): Seeking ends playing.  We don't know exactly
+	 * when this was fixed, but it was working by FFmpeg/LibAV 1.0/10.0. */
+# ifdef FFMPEG
+	if (avformat_version () < AV_VERSION_INT(54,29,104))
+# else
+	if (avformat_version () < AV_VERSION_INT(55,12,0))
+# endif
+	{
+		if (!strcmp (data->ic->iformat->name, "asf") &&
+			data->codec->id == CODEC_ID_MP2)
+			return true;
+	}
 
 #if 0
 	/* AU (.au): Seeking ends playing. */
@@ -813,8 +821,15 @@ static bool is_seek_broken (struct ffmpeg_data *data)
 	 *             Seeking from the decoder works for false errors (but
 	 *             probably not for real ones) because the player doesn't
 	 *             get to see them. */
-	if (!strcmp (data->ic->iformat->name, "flv"))
-		return true;
+# ifdef HAVE_FFMPEG
+	if (avcodec_version () < AV_VERSION_INT(55,8,100))
+# else
+	if (avcodec_version () < AV_VERSION_INT(55,57,1))
+# endif
+	{
+		if (!strcmp (data->ic->iformat->name, "flv"))
+			return true;
+	}
 #endif
 
 #if 0
