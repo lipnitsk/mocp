@@ -92,6 +92,7 @@ Transitional Code Removal (after 2.5):
 * Remove ALSA version 1.0.11 requirement warning.
 * Remove POPT requirement warning.
 * Remove TagLib version 1.5 requirement warning.
+* Remove Musepack libmpc (instead of libmpcdec) requirement warning.
 * Remove XZ requirement warning.
 
 
@@ -113,6 +114,7 @@ Pending 2.6 Changes:
 * Require at least ALSA version 1.0.11.
 * Require the POPT library (libpopt).
 * Require at least TagLib version 1.5.
+* Require Musepack libmpc (instead of libmpcdec).
 * Replace curl-config version checking with pkg-config.
 * Make XZ the default compression for the 'make dist' target.
 
