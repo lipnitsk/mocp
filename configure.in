@@ -370,8 +370,12 @@ AC_TRY_COMPILE([#include <stdarg.h>],
 			  [Define if we have __attribute__ extension])])
 
 dnl ncurses
-MP_WITH_CURSES
-if test -z "$CURSES_LIB"
+dnl This 'unset' circumvents a notified bug in AX_WITH_CURSES when
+dnl _PKG_CONFIG succeeds but a stale 'pkg_failed' value is checked.
+dnl It can be removed once an updated 'ax_with_curses.m4' is committed.
+unset pkg_failed
+AX_WITH_CURSES
+if test "x$ax_cv_curses" != "xyes"
 then
 	AC_MSG_ERROR([You need curses/ncurses library and header files.])
 else
@@ -379,8 +383,22 @@ else
 		AC_DEFINE([HAVE_SET_ESCDELAY], 1, [Define if you have set_escdelay.]),
 		[AC_CHECK_FUNC([setenv], ,
 			AC_MSG_ERROR([Required function setenv not found.]))])
-	EXTRA_LIBS="$EXTRA_LIBS -l$CURSES_LIB"
+	EXTRA_LIBS="$EXTRA_LIBS $CURSES_LIB"
 fi
+EXTRA_LIBS="$EXTRA_LIBS $CURSES_LIBS"
+dnl Remove -D_GNU_SOURCE as it causes problems when defined mid-configure.
+for flag in $CURSES_CFLAGS
+do
+	if test "x$flag" != "x-D_GNU_SOURCE"
+	then
+		CPPFLAGS="$CPPFLAGS $flag"
+	fi
+done
+AC_RUN_LOG([: The test below is actually for set_escdelay in curses library.])
+AC_RUN_LOG([: Using 'm' avoids unpacking CURSES_LIBS.])
+AC_CHECK_LIB([m], [set_escdelay],
+	AC_DEFINE([HAVE_SET_ESCDELAY], 1, [Define if you have set_escdelay.]),
+	[], [$CURSES_LIBS])
 
 dnl popt
 AC_CHECK_LIB([popt], [poptGetContext], [true], [POPT_MISSING="yes"])
