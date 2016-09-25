@@ -207,6 +207,7 @@ static void start_moc (const struct parameters *params, lists_t_strs *args)
 	else if (params->foreground && params->only_server) {
 		set_me_server ();
 		list_sock = server_init (params->debug, params->foreground);
+		signal (SIGCHLD, sig_chld);
 		server_loop (list_sock);
 	}
 
