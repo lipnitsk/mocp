@@ -336,7 +336,21 @@ static int alsa_init (struct output_driver_caps *caps)
 		mixer_handle = NULL;
 	}
 
-	return fill_capabilities (caps);
+	err = fill_capabilities (caps);
+
+	if (err != 0 &&
+	    sizeof (long) < 8 && options_was_defaulted ("ALSAStutterDefeat")) {
+		fprintf (stderr,
+		         "\n"
+		         "Warning: Your system may be vulnerable to stuttering audio.\n"
+		         "         You should read the example configuration file comments\n"
+		         "         for the 'ALSAStutterDefeat' option and set it accordingly.\n"
+		         "         Setting the option will remove this warning.\n"
+		         "\n");
+		sleep (5);
+	}
+
+	return err;
 }
 
 static int alsa_open (struct sound_params *sound_params)
@@ -406,6 +420,14 @@ static int alsa_open (struct sound_params *sound_params)
 		error ("Can't set sample format: %s", snd_strerror(err));
 		snd_pcm_hw_params_free (hw_params);
 		return 0;
+	}
+
+	if (options_get_bool ("ALSAStutterDefeat")) {
+		err = snd_pcm_hw_params_set_rate_resample (handle, hw_params, 0);
+		if (err == 0)
+			logit ("ALSA resampling disabled");
+		else
+			logit ("Unable to disable ALSA resampling: %s", snd_strerror(err));
 	}
 
 	params.rate = sound_params->rate;
