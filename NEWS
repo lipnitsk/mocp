@@ -1,3 +1,21 @@
+2.5.2
+	* New configuration file options:
+	  - ALSAStutterDefeat: avoid the ALSA bug which causes stuttering
+	* Significant bug fixes:
+	  - Fixed error during configure on busybox systems
+	  - Fixed calculation of average bitrate in FLAC decoder
+	  - Fixed unintentional disabling of MMAP support
+	  - Fixed build failure on split ncurses/tinfo systems
+	  - Fixed unreaped children when running in foreground mode
+	  - Fixed freeze on Nokia devices if audios play to completion
+	  - Circumvented ALSA stutter bug
+	  - Added missing 'Precache' option to example config file
+	* Miscellaneous:
+	  - Improved the accuracy of the average bitrate for FLAC
+	  - Mitigated out-of-file seeking for several formats
+	  - Warn of TagLib version requirement rising to 1.5
+	  - Warn of Musepack library changing to libmpc (from libmpcdec)
+
 2.5.1
 	* Significant bug fixes:
 	  - Corrected the setting of linked libraries for Berkeley DB
