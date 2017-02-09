@@ -375,6 +375,7 @@ int plist_find_fname (struct plist *plist, const char *file)
 	struct rb_node *x;
 
 	assert (plist != NULL);
+	assert (file != NULL);
 
 	x = rb_search (&plist->search_tree, file);
 
@@ -691,10 +692,12 @@ void plist_cat (struct plist *a, struct plist *b)
 	assert (b != NULL);
 
 	for (i = 0; i < b->num; i++) {
+		if (plist_deleted (b, i))
+			continue;
+
 		assert (b->items[i].file != NULL);
 
-		if (!plist_deleted(b, i)
-				&& plist_find_fname(a, b->items[i].file) == -1)
+		if (plist_find_fname (a, b->items[i].file) == -1)
 			plist_add_from_item (a, &b->items[i]);
 	}
 }
@@ -843,7 +846,12 @@ void plist_remove_common_items (struct plist *a, struct plist *b)
 	assert (b != NULL);
 
 	for (i = 0; i < a->num; i++)
-		if (plist_find_fname(b, a->items[i].file) != -1)
+		if (plist_deleted (a, i))
+			continue;
+
+		assert (a->items[i].file != NULL);
+
+		if (plist_find_fname (b, a->items[i].file) != -1)
 			plist_delete (a, i);
 }
 
